@@ -1,0 +1,289 @@
+---
+title: "SSCM Exercise 1"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+---
+
+
+
+```{r, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(microbenchmark)
+```
+
+# Prepearation
+
+```{r}
+set.seed(11721138)
+x1 <- rnorm(100)
+x2 <- rnorm(100, mean=1000000)
+
+x1 %>% head()
+x2 %>% head()
+```
+I first set the seed to be my matriculation number. 
+The first vector contains 100 normally distributed numbers with a mean of 0 and a standard deviation of 1. 
+The first vector contains 100 normally distributed numbers with a mean of 1000000 and a standard deviation of 1. 
+I display both vectors' first values using `head()`.
+
+
+
+
+# Variance Algorithms
+
+## Algorithm 1
+```{r}
+variance_1 <- function(x, c=NULL){
+  x_n <- length(x)
+  x_mean <- mean(x)
+  x_deviants <- x - x_mean
+  x_deviants_squared <- x_deviants^2
+  x_variance <- (sum(x_deviants_squared)) / (x_n - 1)
+  return (x_variance)  
+}
+
+variance_1(x1)
+```
+
+Algorithm 1 first computes the n, the length of the sample, and the mean. 
+Then it subtracts the mean from each value, computing the deviants. 
+The sum of the deviants is then summed up, squared, and divided by n-1. 
+This yields the variance.
+
+## Algorithm 2
+
+```{r}
+variance_2 <- function(x, c=NULL){
+  x_n <- length(x)
+  p1 <- sum(x^2)
+  p2 <- (sum(x)^2) / x_n
+  x_variance <- (p1 - p2) / (x_n - 1)
+  return (x_variance)
+}
+
+variance_2(x1)
+```
+
+Algorithm 2 also starts by computing the vector length. It then computes p1, the sum of squares. Then it computes p2, the mean of the squared sum of values. The variance is then computed by dividing the difference between p1 and p2 by n-1. 
+
+## Algorithm 3
+```{r}
+
+variance_3 <- function(x, c=NULL){
+  if (is.null(c)) c <- x[1]
+  x_n <- length(x)
+  p1 <- sum((x - c)^2)
+  p2 <- (sum(x-c)^2)/x_n
+  x_variance <- (p1 - p2) / (x_n - 1)
+  return (x_variance)
+}
+
+cs <- c(0, x1[1], x1[2], x1[3], 1, 10, 100, -100, 1000, 1000000, 11721138, -11721138)
+vcs <- sapply(cs, function(c) variance_3(x1, c))
+data.frame(c=cs, `Variance per algorithm 3`=vcs) %>% kable()
+
+```
+Algorithm 3 does the same thing as algorithm 2, but every value gets shifted by a single constant `c`. 
+Generally, since the shifting variable c is constant, the variance should stay the same no matter what value c takes ... it is scale-invariant. Computationally, this is not happening. As seen in the table above, above some high absolute number value, internal rounding errors will start changing the variance. 
+
+# Algorithm 4
+
+```{r}
+
+online_variance_4 <- function(x){
+  # compute the online/cumulative means
+  x_online_means <- cumsum(x) / seq_along(x)
+  
+  # prepare an empty vector for the online variances
+  x_online_variances <- c()
+  
+  # iterate over 1 through n
+  for (i in seq(x)) {
+    # the first value is alone and therefore has a variance of 0
+    if (i == 1) {
+      x_online_variances[i] <- 0
+      next
+    }
+    # otherwise compute the formula
+    left_term <- (i - 2) / (i - 1) * x_online_variances[i-1]
+    right_term <- (x[i] - x_online_means[i-1])^2 / i
+    x_online_variances[i] <- left_term + right_term
+  }
+  
+  return (x_online_variances)  
+}
+
+variance_4 <- function(x, c=NULL) online_variance_4(x) %>% last()
+
+data.frame(
+  n = 1:100,
+  value = x1,
+  Online.Variances = online_variance_4(x1)
+) %>% 
+  filter((n < 6) | (n > 95)) %>% 
+  kable()
+```
+Algorithm 4 is an online computation, which computes the variances anew for every element in a sequence when an element is added. 
+Firstly, this requires the online means, which are the cumulative means of the vector. This is computed using `cumsum()` and `seq_along()`. 
+I then iterate over the values `1, 2, 3, ..., n-2, n-1, n`. 
+In the first iteration, the variance is zero, because 1 single element has a variance of 0. 
+The following iterations then access the means and variances of the previous iterations. 
+In every following iteration I compute the left term, which accesses the saved variances of the respective previous iteration, and the right term of the formula, which accesses the new/current element in the sequence and deducts the mean of the previous iteration. 
+
+Looking at the table above, you can observe the variance being zero at first and converging to 1 over time, and finally ending at about the same value as computed in the previous 3 algorithms.
+
+## Wrapper function
+```{r}
+get_variances <- function(x, c=NULL){
+  
+  funs <- c(var,   variance_1,   variance_2,   variance_3,   variance_4)
+  names <- c("Base R", "Algorithm 1", "Algorithm 2", "Algorithm 3", "Algorithm 4 (online)")
+  
+  out <- data.frame(
+    Function = names,
+    Variance = sapply(funs, function(f) f(x, c)),
+    Mean.Time.ms = sapply(funs, function(f) mean(microbenchmark(f(x))$time) / 1e6)
+  )
+  return (out)
+}
+
+
+```
+I put the `microbenchmark` function inside the wrapper function. It calls the base-R `var()` function, as well as all 4 of my own variance functions. From the online variance algorithm #4, it saves only the last value. 
+The names of the algorithms and the resulting variances are output in a single dataframe. 
+Computation times are added to the resulting dataframe. 
+
+
+# Comparing Base R and custom function computation time
+## Sample 1
+```{r, fig.height=8, fig.width=6}
+get_variances(x1) %>% kable()
+
+microbenchmark(
+  "Base R" = var(x1),
+  "Algorithm 1" = variance_1(x1),
+  "Algorithm 2" = variance_2(x1),
+  "Algorithm 3" = variance_3(x1),
+  "Algorithm 4" = variance_4(x1)
+) %>% 
+  ggplot(aes(x = expr, y = time / 1e6)) +  
+  geom_boxplot() +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, " ms")) +  
+  ggtitle("Mean computation times of different variance algorithms. Sample x1")
+```
+
+## Sample 2
+```{r, fig.height=8, fig.width=6}
+get_variances(x1) %>% kable()
+
+microbenchmark(
+  "Base R" = var(x2),
+  "Algorithm 1" = variance_1(x2),
+  "Algorithm 2" = variance_2(x2),
+  "Algorithm 3" = variance_3(x2),
+  "Algorithm 4" = variance_4(x2)
+) %>% 
+  ggplot(aes(x = expr, y = time / 1e6)) +  
+  geom_boxplot() +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, " ms")) +  
+  ggtitle("Mean computation times of different variance algorithms. Sample x2")
+
+
+```
+I get the computation times again usign `microbenchmark` and plot the `time` data in miliseconds on a `ggplot` boxplot. 
+The table and plot show that the Base R function is in fact slower on average than the 3 custom batch variance functions. The online function is of course slower, as it computes 100 different variances sequentially.
+
+
+
+
+
+
+
+
+
+# Condition Number
+
+## Extra dataset
+```{r}
+x3 <- rnorm(100, mean=1000000 , sd=0.0000001)
+
+```
+The third sample has the same mean as the second one, but with a very small standard deviation.
+
+
+```{r}
+con_num_variance <- function(x) sqrt(sum(x^2) / sum((x - mean(x))^2))
+
+con_num_variance(rnorm(100, mean = 0, sd=1))
+con_num_variance(rnorm(100, mean = 1e-6, sd=1))
+con_num_variance(rnorm(100, mean = 1e-6, sd=1e-3))
+
+```
+On the first sample with a mean of 0 or very close to 0 and a standard deviation of 1 or smaller the condition number is converging to 0. 
+
+
+```{r}
+con_num_variance(rnorm(100, mean = 1e6, sd=1e6))
+```
+Even when using a very high mean and an equally high standard deviation, the condition number remains close to 1. 
+
+```{r}
+x4 <- rnorm(100, mean = 1e6, sd=1e-6)
+
+var(x4)
+con_num_variance(x4)
+
+```
+When using a high mean and a low standard deviation on the other hand, the condition number is very large, even though the variance is very low.
+
+## Shifted variance condition number
+```{r Dataset 1}
+con_num_variance_shift <- function(x, c) sqrt(1 + length(x) / sum((x-mean(x))^2) * (mean(x)-c)^2)
+
+# visualize condition number of variance with shifting constant
+show_shifted_k <- function(x, title_append=""){
+  # the the sample mean
+  xhat <- x %>% mean()
+  # get exemplary values for the constant c
+  constants = 2 ^ seq(-12, 12)
+  constants = c(-1*constants, constants) + xhat
+  # create a dataframe to viszalize everything
+  data.frame(
+    cs = constants,
+    vs = sapply(constants, function(c) variance_3(x, c)),
+    ks = sapply(constants, function(c) con_num_variance_shift(x, c))
+  ) %>%  
+    ggplot(aes(x=cs, y=ks)) + 
+    geom_line() +
+    geom_vline(xintercept = xhat, color="red") +
+    theme_minimal() +
+    labs(x="Constant c", y="k", subtitle="Red line: mean") +
+    ggtitle("Condition number k of variance when shifted by constant c" %>% paste0(title_append))
+}
+
+con_num_variance_shift(x1, 0)
+show_shifted_k(x1, ": Dataset x1")
+con_num_variance_shift(x2, 1000000)
+show_shifted_k(x2, ": Dataset x2")
+con_num_variance_shift(x3, 1e6)
+show_shifted_k(x3, ": Dataset x3")
+
+
+
+```
+I created a funciton that computes the mean for a sample. It then generates 48 constants on an exponential scale around the mean, which will illustrate the influence of the shifting constants on the condition number. I apply the condition number formula and plot the results on a line chart for each sample. The red lines mark the samples' means.   
+
+When plotting the condition number for the shifted algorithm for different 
+constant values of c, it can be observed that the condition number is lowest 
+when c is equal to the sample mean.  
+
+When comparing the plots on samples 2 and 3, you may notice that while their condition numbers may both be converging to 1 at around their mean, the condition number of sample 3 rises much faster the larger the difference between the mean and the shifting constant c becomes. 
