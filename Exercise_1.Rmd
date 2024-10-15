@@ -208,9 +208,8 @@ The table and plot show that the Base R function is in fact slower on average th
 
 
 
+# Scale Invariance
 
-
-# Condition Number
 
 ## Extra dataset
 ```{r}
@@ -218,6 +217,67 @@ x3 <- rnorm(100, mean=1000000 , sd=0.0000001)
 
 ```
 The third sample has the same mean as the second one, but with a very small standard deviation.
+
+
+
+```{r}
+# x: vector of numbers
+# k: number of values * 2 + 1
+# j: base of exponentials
+get_large_value_range <- function(x, k=12, j=2){
+  xhat <- x %>% mean()
+  # get exemplary values for the constant c
+  constants = j ^ seq(-k, k)
+  c(-1*constants, constants) + xhat
+}
+
+```
+This function returns a vector of constant values centered around the mean of the 
+given function, with exponentially rising distances between the numbers.
+
+
+
+```{r}
+
+# Display shifted variance constant size influence on variance
+foo <- function(x){
+  # get exemplary values for the constant c
+  constants <- get_large_value_range(x1, j=4)
+  variances <- sapply(constants, function(c) variance_3(x, c))
+  data.frame(
+    mean=round(mean(x)),
+    sd=round(sd(x), 6),
+    c=constants,
+    variances=variances
+  ) %>% 
+    ggplot(aes(x=c, y=variances)) +
+    geom_line() +
+    geom_vline(xintercept=mean(x), color="red") +
+    geom_hline(yintercept=variance_1(x), color="blue") +
+    theme_minimal() +
+    xlab("Shifting constant c") +
+    ylab("Variance") +
+    ggtitle("Scale invariance property visualized")
+}
+
+foo(x1)
+foo(x2)
+foo(x3)
+
+```
+The plots above display the influence of the shifting constant on the resulting variances. 
+The scale invariance property appears not to hold for larger absolute values of c. 
+The red lines mark a c value equal to the sample mean, the blue lines indicate 
+the variance of a shift of zero.
+
+
+
+
+
+
+
+# Condition Number
+
 
 
 ```{r}
