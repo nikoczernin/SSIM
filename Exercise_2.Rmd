@@ -130,3 +130,124 @@ If either are unequal to zero, you get a random sequence with seemingly no cycle
 visualize_random_numbers(200,  1,  56,  17,  13, "Plot K")
 ```
 
+
+
+
+
+
+
+# Sampling from the Exponential distribution
+
+To generate a random sample from $exp$, you first generate a random sample from 
+the uniform distribution = u. 
+We then set $u = F(x)$, where $F(x)$ is the cdf of $exp$, also solve for x. 
+
+$$F(x)=1-exp(-\lambda x), \lambda >0$$
+$$1-exp(-\lambda x)=u$$
+$$1-u=exp(-\lambda x)$$
+$$ln(1-u)=-x\lambda$$
+$$x=-\frac{ln(1-u)}{\lambda}$$
+With this formula we can use a uniform variable u and convert to to a random 
+variable x form the exponential distribution, with a parameter $\lambda$.
+
+```{r Generate exponental random var}
+
+InvCdfExp <- function(x, lambda=1){
+  # add a tiny number to lambda in case it is zero
+  -log(1 - x) / (lambda+1e-12)
+}
+
+random_exp <- function(n, lambda=1){
+  # generate n different uniform random nums
+  us <- runif(n)
+  # now apply the inverse exponential formula from above
+  InvCdfExp(us)
+}
+
+```
+
+```{r}
+plot_exp_sample <- function(x, n="", lambda=""){
+  p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
+  q <- quantile(x,p=p) # percentiles of the sample distribution
+  plot(qexp(p), q, main="Q-Q Plot of inverse sample generation vs actual distribution: \nExponential", sub=paste0("n=", n, ", lambda=", lambda),
+       xlab="Theoretical Quantiles", ylab="Sample Quantiles")
+  qqline(q, distribution=qexp, col="red")
+}
+
+```
+
+```{r}
+n <- 1000
+lambda <- 0
+x <- random_exp(n, lambda)
+plot_exp_sample(x, n, lambda)
+
+```
+
+```{r}
+n <- 1000
+lambda <- 1
+x <- random_exp(n, lambda)
+plot_exp_sample(x, n, lambda)
+
+```
+
+```{r}
+n <- 1000
+lambda <- 1e6
+x <- random_exp(n, lambda)
+plot_exp_sample(x, n, lambda)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+# Smapling from the Beta distribution
+
+
+
+```{r}
+n <- 100
+iter <- 0
+accepted <- 0
+x <- numeric(n)
+
+# in this example, norm is f(x) and students t is g(x)
+while(accepted<n){
+  # this we can easily do
+  u <- runif(1)
+  iter <- iter + 1
+  # generate a random number from the student t distribution
+  y <- rt(1, df=1)
+  CC <- 1.6
+  # get the probability of y in the standard normal distribution (dnorm(y))
+  # and divide it by c times the probability of y being in the student t distr
+  # if this is larger than the uniform random number u, save it as a sample of t
+  if (dnorm(y)/(CC * dt(y, 1)) >= u){
+    accepted <- accepted + 1
+    x[accepted] <- y
+  }
+}
+qqnorm(x)
+qqline(x)
+
+```
+
+
+
+This is the pdf of the Beta distribution. 
+$$f(x; \alpha, \beta) = \frac{\Gamma(\alpha + \beta)}{\Gamma (\alpha)\Gamma(\beta)}x^{\alpha-1}(1-x)^{\beta-1}$$
+
+
+
+
