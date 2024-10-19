@@ -201,7 +201,9 @@ plot_exp_sample(x, n, lambda)
 
 ```
 
-
+The random number generator generates numbers that visually match the target 
+distribution quite closely. The the higher quantiles, there seems to be some sverving 
+from the target distribution, but nothing grave. 
 
 
 
@@ -216,32 +218,6 @@ plot_exp_sample(x, n, lambda)
 
 
 
-```{r}
-n <- 100
-iter <- 0
-accepted <- 0
-x <- numeric(n)
-
-# in this example, norm is f(x) and students t is g(x)
-while(accepted<n){
-  # this we can easily do
-  u <- runif(1)
-  iter <- iter + 1
-  # generate a random number from the student t distribution
-  y <- rt(1, df=1)
-  CC <- 1.6
-  # get the probability of y in the standard normal distribution (dnorm(y))
-  # and divide it by c times the probability of y being in the student t distr
-  # if this is larger than the uniform random number u, save it as a sample of t
-  if (dnorm(y)/(CC * dt(y, 1)) >= u){
-    accepted <- accepted + 1
-    x[accepted] <- y
-  }
-}
-qqnorm(x)
-qqline(x)
-
-```
 
 
 
@@ -250,4 +226,218 @@ $$f(x; \alpha, \beta) = \frac{\Gamma(\alpha + \beta)}{\Gamma (\alpha)\Gamma(\bet
 
 
 
+```{r}
+n <- 1000
+i <- seq(0, 1, 1/n)
 
+beta1 <- dbeta(i, 1,1) 
+beta2 <- dbeta(i, 2,2) 
+beta7 <- dbeta(i, 7,7) 
+beta12 <- dbeta(i, 12,12) 
+beta.5 <- dbeta(i, .5, .5) 
+beta.005 <- dbeta(i, .005, .005) 
+beta.05 <- dbeta(i, .05, .05) 
+beta.05 <- dbeta(i, .05, .05) 
+beta.9 <- dbeta(i, .9, .9) 
+
+norm <- dnorm(i) 
+uni <- dunif(i)
+
+
+     
+plot(i, beta12, type="n", main="PDF of Beta distribution",
+     sub="blue line: a=b=1, red line: a=b=2")
+lines(i, beta2, col="red")
+lines(i, beta12)
+lines(i, beta7)
+lines(i, beta1, col="blue")
+lines(i, uni, col="purple")
+
+# plot(seq(0,20), seq(0,4, 4/20), type="n")
+plot(i, beta7, type="n", main="PDF of Beta distribution",
+     sub="blue line: a=b=1, green line: a=b=0.5")
+# lines(beta2)
+# lines(beta7)
+lines(i, beta1, col="blue")
+lines(i, beta.5)
+lines(i, beta.005)
+lines(i, beta.05, col="green")
+lines(i, beta.9)
+lines(i, uni, col="purple")
+# lines(beta.05)
+```
+When observing the pdf of the Beta distributions with alpha and beta values 
+larger than 1, the curves are upwards-bell-shaped, converging to 0 on both ends. 
+An obvious choice of proposal distribution for the acceptance-rejection method 
+is the uniform distribution. If values a and b are greater than 1, a straight line 
+above the bell curve would allow us to propose samples that may well be samples 
+from our target distribution, even if that may be inefficient for lower values. 
+
+Let $g(x)$ be the uniform density and $f(x)$ be the density of the Beta distribution. 
+We then need to find the constant c, where $\forall x \in [0, 1]: c*g(x) > f(x)$. 
+When looking at the red line in the PDF of the Beta distribution, the curve peaks 
+at around 1.5. We can confirm this by computing the density at the median (0.5)= $d\_beta (0.5, 2, 2)= $`r dbeta(0.5, 2, 2)`. The density of the uniform distribution is always 1, so a constant 
+$c=1.5$ would be sufficient here, as shown in the following plot:
+
+
+```{r}
+
+plot(i, beta7, type="n", main="PDF of Beta distribution",
+     sub="red line: f(x), purple line: g(x), orange line: g(x)*1.5")
+lines(i, beta2, col="red")
+lines(i, uni, col="purple")
+lines(i, uni*1.5, col="orange")
+
+
+```
+
+```{r Beta(2,2) AR Method}
+
+accept_reject_beta <- function(n, a=2, b=2, c=1.5, get=T, plot=T){
+  n_accepted <- 0
+  n_rejected <- 0
+  x <- numeric(n)
+  
+  while (n_accepted<n){
+    u <- runif(1)
+    # get a proposal sample
+    y <- runif(1)
+    # test the proposed sample
+    if (u <= dbeta(y, a, b) / c){
+      n_accepted <- n_accepted + 1
+      x[n_accepted] <- y
+    } else {
+      n_rejected <- n_rejected + 1
+    }
+  }
+  print(paste("Sampling complete —— Rejection proportion:", (n_rejected / (n+n_rejected)) %>% round(4), "—— Iterations:", n+n_rejected))
+      # plot the data
+  if (plot){
+    i <- seq(0, 1, 1/n)[1:n]
+    plot(i, sort(x), type="n", xlab="Quantile", ylab="Probability",
+         main="CDF of Beta distribution (blue) and simulated sample (red)")
+    lines(i, sort(x), col="red")
+    lines(i, rbeta(n, a, b) %>% sort(), col="blue")
+  }
+
+}
+
+accept_reject_beta(n=n, a=2, b=2, c=1, get=F) 
+accept_reject_beta(n=n, a=2, b=2, c=1.5, get=F)
+accept_reject_beta(n=n, a=2, b=2, c=3, get=F)
+accept_reject_beta(n=n, a=2, b=2, c=30, get=F)
+
+```
+The function above uses a static constant c to apply the acceptance-rejection method 
+to gather samples from the Beta distribution using the uniform distribution to 
+propose possible samples.  
+The test results show that the higher the constant c, i.e. the larger the distance 
+between the PDFs, the more samples get rejected and the more iterations are required 
+to gather the wanted number of samples. While using a value of $c=1$ terminates the 
+fastest and rejects the fewest samples, this option is not viable, because this way the 
+requirement of $\forall x \in [0, 1]: c*g(x) > f(x)$ is no longer met.  
+
+The plotted lines on the CDFs show that the simulated sample matches the target distribution quite closely.
+
+## Different values of a and b; a,b>=1
+
+```{r}
+accept_reject_beta_autoc <- function(n, a=2, b=2, get=T, plot=T){
+  n_accepted <- 0
+  n_rejected <- 0
+  x <- numeric(n)
+  
+  # compute the optimal value c
+  # to avoid having to differentiate the pdf, i do a heuristic approach
+  c <- dbeta(i, 4, 4) %>% max()
+  
+  while (n_accepted<n){
+    u <- runif(1)
+    # get a proposal sample
+    y <- runif(1)
+    # test the proposed sample
+    if (u <= dbeta(y, a, b) / c){
+      n_accepted <- n_accepted + 1
+      x[n_accepted] <- y
+    } else {
+      n_rejected <- n_rejected + 1
+    }
+  }
+  print(paste("Sampling complete —— Rejection proportion:", (n_rejected / (n+n_rejected)) %>% round(4), "—— Iterations:", n+n_rejected))
+  
+    # plot the data
+  if (plot){
+    i <- seq(0, 1, 1/n)[1:n]
+    plot(i, sort(x), type="n", xlab="Quantile", ylab="Probability",
+         main="CDF of Beta distribution (blue) and simulated sample (red)")
+    lines(i, sort(x), col="red")
+    lines(i, rbeta(n, a, b) %>% sort(), col="blue")
+  }
+
+}
+
+accept_reject_beta_autoc(n=n, a=2, b=2, get=F, plot=T) 
+accept_reject_beta_autoc(n=n, a=2, b=2, get=F, plot=T)
+accept_reject_beta_autoc(n=n, a=2, b=2, get=F, plot=T)
+accept_reject_beta_autoc(n=n, a=2, b=2, get=F, plot=T)
+```
+The approach above uses a heuristic approach of calculating 1000 samples from 
+the pdf of beta and grabbing the max value. While this approach is approximately 
+doing what we want, we still cannot guarantee every value being the requirement 
+defined before to be always true.  
+
+Again, the cdf plots show 
+
+The maximum of the Beta pdf is generally located at $x = (\alpha - 1) / (\alpha + \beta -2)$, which allows us to make an more exact determination of a good c value:
+
+```{r}
+
+
+accept_reject_beta_autoc <- function(n, a=2, b=2, get=T, plot=F){
+  n_accepted <- 0
+  n_rejected <- 0
+  x <- numeric(n)
+  
+  # compute the optimal value c
+  # to avoid having to differentiate the pdf, i do a heuristic approach
+  quantile_of_max_density_beta <- (a-1)/(a+b-2)
+  c <- dbeta(quantile_of_max_density_beta, a, b)
+  
+  while (n_accepted<n){
+    u <- runif(1)
+    # get a proposal sample
+    y <- runif(1)
+    # test the proposed sample
+    if (u <= dbeta(y, a, b) / c){
+      n_accepted <- n_accepted + 1
+      x[n_accepted] <- y
+    } else {
+      n_rejected <- n_rejected + 1
+    }
+  }
+  print(paste("Sampling complete —— Rejection proportion:", (n_rejected / (n+n_rejected)) %>% round(4), "—— Iterations:", n+n_rejected))
+  
+  # plot the data
+  if (plot){
+    i <- seq(0, 1, 1/n)[1:n]
+    plot(i, sort(x), type="n", xlab="Quantile", ylab="Probability",
+         main="CDF of Beta distribution (blue) and simulated sample (red)")
+    lines(i, sort(x), col="red")
+    lines(i, rbeta(n, a, b) %>% sort(), col="blue")
+  }
+}
+
+accept_reject_beta_autoc(n=n, a=2, b=2, get=F, plot=T)
+accept_reject_beta_autoc(n=n, a=6, b=4, get=F, plot=T)
+accept_reject_beta_autoc(n=n, a=12, b=4, get=F, plot=T)
+accept_reject_beta_autoc(n=n, a=25, b=53, get=F, plot=T)
+
+```
+This approach is mathematically more correct, even though the required iterations 
+and rejection proportion are pretty much the same as when using the heuristic approach. 
+On the other hand, this approach is more efficient overall, as the function saves 
+time by not having to generate a whole extra sample just to get 
+a good maximum value.  
+
+Here the cdf plot lines still show promising matches of the simulated sample distribution 
+to the target distribution.
