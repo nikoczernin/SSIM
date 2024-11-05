@@ -1,0 +1,87 @@
+---
+title: "SSCM Exercise 3"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+
+```
+
+# Task 1
+
+## Estimation of the integral with bounds [0, 1]
+```{r}
+
+fun <- function(x) exp(-x^3)
+
+us <- runif(10000) %>% sort()
+mce <- mean(exp(-us^3)) 
+int <- integrate(function(x)exp(-x^3), 0, 1) 
+
+k <- 6
+print(paste("Monte Carlo Integral:", mce %>% round(k)))
+print(paste("Base R Integral:", int$value %>% round(k)))
+
+curve(fun, 0, 1)
+```
+
+## Estimation of the integral with bounds [1, 6]
+
+```{r}
+a = 1
+b = 6
+us <- runif(10000, min=a, max=b) %>% sort()
+mce <- (mean(exp(-us^3))*(a-b)) 
+int <- integrate(function(x)exp(-x^3), lower=2, upper=5) 
+curve(fun, a, b)
+
+
+k <- 6
+print(paste("Monte Carlo Integral:", mce %>% round(k)))
+print(paste("Base R Integral:", int$value %>% round(k)))
+
+```
+The Monte Carlo integral was more precise with bounds $[0,1]$. 
+
+
+## Estimation of the integral with bounds [1, inf]
+To estimate the integral with infinite bounds, we need to find a function with a 
+shape similar to the function we are approximating. 
+The exponential function is a good match because it also goes to infinity, we can 
+therefore shift it by -1, so that the bounds of the integral are $[0, Inf)$ and 
+we just hav eto replace x by x+1 in the function. 
+
+
+
+```{r}
+# generate samples from the exponential distribution
+x <- rexp(10000)
+mce <- mean(fun(x+1) / dexp(x))
+
+int <- integrate(fun, 1, Inf)
+
+k <- 6
+print(paste("Monte Carlo Integral:", mce %>% round(k)))
+print(paste("Base R Integral:", int$value %>% round(k)))
+
+
+```
+
+When using infinite bounds instead of 6 as an upper bound, the estimated integrals 
+of Monte Carlo and the Base R function are much closer together. 
+The first task used uniform sampling, which naturally grabbed a lot of samples in the 
+region [2,6], but the density is way lower here in the target function and thus 
+there were a lot of numbers generated which dont represent the target distribution very well 
+and dont add enough to the sum which will be the integral. 
+
+When sampling form the exponential function we get a lot of numbers from the 
+area of importance instead, which in turn make better contributions to the integral. 
+There is more emphasis on smaller values, which are more commonin our target distribution. 
+
+
+
+
