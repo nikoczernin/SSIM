@@ -18,7 +18,8 @@ set.seed(11721138)
 
 ```{r}
 # Define our starting sample X
-X <- "4.94 5.06 4.53 5.07 4.99 5.16 4.38 4.43 4.93 4.72 4.92 4.96" %>% strsplit(" ") %>% unlist() %>% as.numeric() %>% print()
+X <- "4.94 5.06 4.53 5.07 4.99 5.16 4.38 4.43 4.93 4.72 4.92 4.96" %>% 
+  strsplit(" ") %>% unlist() %>% as.numeric() %>% print()
 N <- length(X)
 
 ```
@@ -55,19 +56,25 @@ bootstrap.means <- sapply(bootstrap.samples, function(s) mean(s))
 I use lapply to loop 2000 times and create a new sample with replacement every time and then save the means of the sample using sapply instead.
 
 ```{r}
-mean20 <- mean(bootstrap.means[1:20]) %>% print_("Mean of the first 20 sample means:", .)
-mean200 <- mean(bootstrap.means[1:200]) %>% print_("Mean of the first 200 sample means:", .)
-mean2000 <- mean(bootstrap.means[1:2000]) %>% print_("Mean of the first 2000 sample means:", .)
+mean20 <- mean(bootstrap.means[1:20]) %>% 
+  print_("Mean of the first 20 sample means:", .)
+mean200 <- mean(bootstrap.means[1:200]) %>% 
+  print_("Mean of the first 200 sample means:", .)
+mean2000 <- mean(bootstrap.means[1:2000]) %>% 
+  print_("Mean of the first 2000 sample means:", .)
 
 ```
 
 
 ```{r}
-hist(bootstrap.means[1:20], breaks = seq(min(X), max(X), 0.05), main="Histogram of 2000 bootstrap means")
+hist(bootstrap.means[1:20], breaks = seq(min(X), max(X), 0.05), 
+     main="Histogram of 2000 bootstrap means")
 abline(v=X.mean, col="red")
-hist(bootstrap.means[1:200], breaks = seq(min(X), max(X), 0.01), main="Histogram of 2000 bootstrap means")
+hist(bootstrap.means[1:200], breaks = seq(min(X), max(X), 0.01), 
+     main="Histogram of 2000 bootstrap means")
 abline(v=X.mean, col="red")
-hist(bootstrap.means[1:2000], breaks = seq(min(X), max(X), 0.005), main="Histogram of 2000 bootstrap means")
+hist(bootstrap.means[1:2000], breaks = seq(min(X), max(X), 0.005), 
+     main="Histogram of 2000 bootstrap means")
 abline(v=X.mean, col="red")
 
 
@@ -107,30 +114,37 @@ bootstrap.medians <- sapply(bootstrap.samples, function(s) median(s))
 ```
 
 ```{r}
-mean.median20 <- mean(bootstrap.medians[1:20]) %>% print_("Mean of the first 20 sample medians:", .)
-mean.median200 <- mean(bootstrap.medians[1:200]) %>% print_("Mean of the first 200 sample medians:", .)
-mean.median2000 <- mean(bootstrap.medians[1:2000]) %>% print_("Mean of the first 2000 sample medians:", .)
+mean.median20 <- mean(bootstrap.medians[1:20]) %>% 
+  print_("Mean of the first 20 sample medians:", .)
+mean.median200 <- mean(bootstrap.medians[1:200]) %>% 
+  print_("Mean of the first 200 sample medians:", .)
+mean.median2000 <- mean(bootstrap.medians[1:2000]) %>% 
+  print_("Mean of the first 2000 sample medians:", .)
 
 ```
 
 
 ```{r}
-hist(bootstrap.medians[1:20], breaks = seq(min(X), max(X), 0.05), main="Histogram of 2000 bootstrap medians")
+hist(bootstrap.medians[1:20], breaks = seq(min(X), max(X), 0.05), 
+     main="Histogram of 2000 bootstrap medians")
 abline(v=X.median, col="red")
-hist(bootstrap.medians[1:200], breaks = seq(min(X), max(X), 0.01), main="Histogram of 2000 bootstrap medians")
+hist(bootstrap.medians[1:200], breaks = seq(min(X), max(X), 0.01), 
+     main="Histogram of 2000 bootstrap medians")
 abline(v=X.median, col="red")
-hist(bootstrap.medians[1:2000], breaks = seq(min(X), max(X), 0.005), main="Histogram of 2000 bootstrap medians")
+hist(bootstrap.medians[1:2000], breaks = seq(min(X), max(X), 0.005), 
+     main="Histogram of 2000 bootstrap medians")
 abline(v=X.median, col="red")
 
 
-density(bootstrap.medians) %>% plot(main="Smooth histogram of 2000 bootstrap medians")
+density(bootstrap.medians) %>% 
+  plot(main="Smooth histogram of 2000 bootstrap medians")
 abline(v=X.mean, col="red")
 
 ```
 Regarding the medians, the Central Limit Theorem does not show at all, regarding the overall mean of medians. With more samples I feel like there might be a pattern of multiple little curves in the shape of normal distirbutions for each value in the original sample.  
 I also plotted the curve again using the density() of the medians and plotting it as a line. 
 
-```{r Quantiles}
+```{r Quantiles medians}
 
 data.frame(
   k = c(20, 200, 2000, "True confidence interval"),
@@ -148,7 +162,6 @@ data.frame(
     )
 )
 
-# t.test(X)$conf.int[1]
 ```
 The mean medians' quantiles dont match the confidence interval of the original distribution as closely as the mean means did. 
 
@@ -211,8 +224,13 @@ x.clean.bs.meant <-  bootstrap.nonparam(x.clean, mean, trim=0.05)
 data.frame(
   Sample = c(rep("x", 3), rep("x.clean", 3)),
   Estimator = c("Median", "Mean", "Mean Trimmed") %>% rep(2),
-  Standard.Error = c(x.bs.median$se, x.bs.mean$se, x.bs.meant$se, x.clean.bs.median$se, x.clean.bs.mean$se, x.clean.bs.meant$se) %>% sapply(round, 4),
-  Confidence.Intervals=list(x.bs.median$ci, x.bs.mean$ci, x.bs.meant$ci, x.clean.bs.median$ci, x.clean.bs.mean$ci, x.clean.bs.meant$ci) %>% sapply(function(c) paste(c[1] %>% round(4), ", ", c[2] %>% round(4)))
+  Standard.Error = c(x.bs.median$se, x.bs.mean$se, x.bs.meant$se, 
+                     x.clean.bs.median$se, x.clean.bs.mean$se, 
+                     x.clean.bs.meant$se) %>% sapply(round, 4),
+  Confidence.Intervals=list(x.bs.median$ci, x.bs.mean$ci, x.bs.meant$ci, 
+                            x.clean.bs.median$ci, x.clean.bs.mean$ci, 
+                            x.clean.bs.meant$ci) %>% 
+    sapply(function(c) paste(c[1] %>% round(4), ", ", c[2] %>% round(4)))
 ) %>% 
   print() %>% 
   kable()
@@ -255,23 +273,48 @@ x.bsp.median <-  parametric_bootstrap(x, median, x.center, x.scale)
 x.bsp.mean <-  parametric_bootstrap(x, mean, x.center, x.scale)
 x.bsp.meant <-  parametric_bootstrap(x, mean, x.center, x.scale, trim=0.05)
 
-x.clean.bsp.median <-  parametric_bootstrap(x.clean, median, x.clean.center, x.clean.scale)
-x.clean.bsp.mean <-  parametric_bootstrap(x.clean, mean, x.clean.center, x.clean.scale)
-x.clean.bsp.meant <-  parametric_bootstrap(x.clean, mean, x.clean.center, x.clean.scale, trim=0.05)
+x.clean.bsp.median <-  parametric_bootstrap(x.clean, median, 
+                                            x.clean.center, x.clean.scale)
+x.clean.bsp.mean <-  parametric_bootstrap(x.clean, mean, x.clean.center, 
+                                          x.clean.scale)
+x.clean.bsp.meant <-  parametric_bootstrap(x.clean, mean, x.clean.center, 
+                                           x.clean.scale, trim=0.05)
 
 data.frame(
   Sample = c(rep("x", 3), rep("x.clean", 3)),
   Estimator = c("Median", "Mean", "Mean Trimmed") %>% rep(2),
-  Standard.Error = c(x.bs.median$se, x.bs.mean$se, x.bs.meant$se, x.clean.bs.median$se, x.clean.bs.mean$se, x.clean.bs.meant$se) %>% sapply(round, 4),
-  Confidence.Intervals=list(x.bs.median$ci, x.bs.mean$ci, x.bs.meant$ci, x.clean.bs.median$ci, x.clean.bs.mean$ci, x.clean.bs.meant$ci) %>% sapply(function(c) paste(c[1] %>% round(4), ", ", c[2] %>% round(4))),
-  Bias.Corrected.Estimate = c(x.bsp.median$bias_corrected_estimate, x.bsp.mean$bias_corrected_estimate, x.bsp.meant$bias_corrected_estimate, x.clean.bsp.median$bias_corrected_estimate, x.clean.bsp.mean$bias_corrected_estimate, x.clean.bsp.meant$bias_corrected_estimate)
+  Standard.Error = c(x.bs.median$se, x.bs.mean$se, x.bs.meant$se, 
+                     x.clean.bs.median$se, x.clean.bs.mean$se, 
+                     x.clean.bs.meant$se) %>% sapply(round, 4),
+  Confidence.Intervals=list(x.bs.median$ci, x.bs.mean$ci, x.bs.meant$ci, 
+                            x.clean.bs.median$ci, x.clean.bs.mean$ci, 
+                            x.clean.bs.meant$ci) %>% 
+    sapply(function(c) paste(c[1] %>% round(4), ", ", c[2] %>% round(4))),
+  Bias.Corrected.Estimate = c(x.bsp.median$bias_corrected_estimate, 
+                              x.bsp.mean$bias_corrected_estimate,
+                              x.bsp.meant$bias_corrected_estimate, 
+                              x.clean.bsp.median$bias_corrected_estimate, 
+                              x.clean.bsp.mean$bias_corrected_estimate,
+                              x.clean.bsp.meant$bias_corrected_estimate)
 ) %>% 
-  print() %>% 
   kable()
 
 
 
 ```
+
+As expected, the bias-corrected mean estimate of the medians is more different from its actual mean estimate, than is the case in the clean sample, and the standard error is also higher when having outliers. 
+The bias corrected estimates differ noticeably from the simulations using the clean sample without outliers and the sample with outliers, for all estimated statistics. 
+The standard errors of the estimates seemingly do not differ much adding outliers to the samples, but the confidence intervals appear to be slightly wider when usign outliers, for all statistics. 
+
+
+# Task 3
+Bootstrapping is a method where we repeatedly sample from our data to estimate the accuracy of a measurement, like the mean or median. By taking many samples with replacement, we can calculate a confidence interval for our estimate based on the variation across these samples. This is called non-parametric bootstrapping and works without assuming a specific data shape.
+
+In parametric bootstrapping, we assume the data follows a certain distribution, like normal, and fit the data to get parameters (mean, standard deviation). We then generate samples based on this fitted model and calculate our statistic for each sample to build a confidence interval. Both types of bootstrapping give us insight into the stability and reliability of our estimates.
+
+
+
 
 
 
