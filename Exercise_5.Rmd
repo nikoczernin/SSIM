@@ -1,0 +1,149 @@
+---
+title: "SSCM Exercise 5"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+library(knitr)
+
+# Custom print function
+print_ <- function(...) print(paste(...))
+
+set.seed(11721138)
+```
+# Task 1
+```{r}
+x1 <- c(-0.673, -0.584, 0.572, -0.341, -0.218, 0.603, -0.415, -0.013, 0.763, 0.804, 0.054, 1.746, -0.472, 1.638, -0.578, 0.947, -0.329, -0.188, 0.794, 0.894, -1.227, 1.059)
+x2 <- c(0.913, -0.639, 2.99, -5.004, 3.118, 0.1, 1.128, 0.579, 0.32, -0.488, -0.994, -0.212, 0.413, 1.401, 0.007, 0.568, -0.005, 0.696)
+
+data.frame(
+  Sample=c("x1", "x2"), 
+  Mean = c(mean(x1), mean(x2))
+) %>% kable()
+
+```
+
+## Plotting
+```{r}
+
+# Means
+mean_x1 <- mean(x1)
+mean_x2 <- mean(x2)
+
+boxplot(x1, x2, 
+        horizontal = TRUE, 
+        names = c("x1", "x2"),
+        main = "Boxplot with means as dots",
+        col = c("lightblue", "lightcoral")
+        )
+
+points(mean_x1, 1, cex=2 , pch = 18)
+points(mean_x2, 2 , cex=2, pch = 18)
+
+
+```
+Looking at the boxplots, the means seem to be pretty much the same almost. 
+The first sample has fewer outliers though, a wider outer quantile distance and is more 
+right-skewed. 
+
+## Bootstrapping
+```{r BS non-param}
+# bootstrap.indep <- function(data.1, data.2, estimator, stat=NULL, m=10000, ...) {
+#   # compute the original test-statistic
+#   estimator(x1, x2)$statistic
+#   # generate bootstrap samples
+#   bs.samples.1 <- lapply(1:m, function(x) sample(data.1, replace = TRUE))
+#   bs.samples.2 <- lapply(1:m, function(x) sample(data.2, replace = TRUE))
+#   # compute the estimated parameters of the samples
+#   estimates <- lapply(1:m, function(i) estimator(bs.samples.1[[i]], bs.samples.2[[i]], ...))
+#   if (!is.null(stat)){
+#     estimates <- sapply(estimates, function(e) e[[stat]])
+#   }
+#   # return whatever was created here
+#   estimates
+# }
+
+
+bootstrap.t.indep <- function(data.1, data.2, m=10000, ...) {
+  # compute the original test-statistic
+  original.t <- t.test(x1, x2)$statistic
+  # generate bootstrap samples
+  bs.samples.1 <- lapply(1:m, function(x) sample(data.1, replace = TRUE))
+  bs.samples.2 <- lapply(1:m, function(x) sample(data.2, replace = TRUE))
+  # compute the estimated parameters of the samples
+  bs.ts <- sapply(1:m, function(i) t.test(bs.samples.1[[i]], bs.samples.2[[i]])$statistic)
+  # we now have a student's t distribution
+  # we can extract the p-value from it
+  p.value = mean(abs(bs.ts) >= abs(original.t))
+  # also get the confidence intervals, i.e. the quantiles of the t-stats
+  ci.95 <- quantile(bs.ts, c(0.05, 0.95))
+  ci.99 <- quantile(bs.ts, c(0.01, 0.99))
+  # return whatever was created here
+  list(p.value = p.value, ci.95 = ci.95, ci.99 = ci.99)
+}
+
+bootstrap.t.indep(x1, x2, m=30)
+```
+Here I define a function for non-parametric bootstrapping. 
+The function takes an original sample and a set of estimators, as well as the 
+number of bootstrap samples m.  
+It generates then m different bootstrap samples, sampling from the original samples 
+with replacement and applies the specified estimator to each, returning the result finally. 
+If a certain attribute of the estimator function is wanted, e.g. `t.test()$statistic` or 
+`t.test()$p.value`, 
+this can be specified in the `stat` parameter. 
+
+```{r BS centered}
+bootstrap.t.centered <- function(data.1, data.2, m=10000) {
+  # compute the mean of the combined samples
+  mean.center <- mean(c(data.1, data.2))
+  print("Centering the means by" %>% paste(-mean.center %>% round(3)))
+  # center the 2 samples
+  data.1 <- data.1 - mean.center
+  data.2 <- data.2 - mean.center
+  # apply the independent bootstrap esimation
+  bootstrap.t.indep(data.1, data.2, m=m)
+
+  }
+
+bootstrap.t.centered(x1, x2, m=30)
+
+```
+The function here works similarly to the one before, it only applies 
+combined mean centering before generating samples and applying the estimators. 
+
+## Applying the functions on t-tests
+```{r}
+
+results.bootstrap.t.indep <- bootstrap.t.indep(x1, x2)
+results.bootstrap.t.centered <- bootstrap.t.centered(x1, x2)
+
+res <- data.frame(
+  Independed.Bootstrap.Sampling=c(
+    results.bootstrap.t.indep$ci.95 %>% round(4) %>% paste(collapse = " - "), 
+    results.bootstrap.t.indep$ci.99 %>% round(4) %>% paste(collapse = " - "),
+    results.bootstrap.t.indep$p.value
+  ),
+  Mean.Centered.Bootstrap.Sampling=c(
+    results.bootstrap.t.centered$ci.95 %>% round(4) %>% paste(collapse = " - "), 
+    results.bootstrap.t.centered$ci.99 %>% round(4) %>% paste(collapse = " - "),
+    results.bootstrap.t.centered$p.value
+  )
+) 
+
+rownames(res) <- c("95% Conf.Level", "99% Conf.Level", "p-Value")
+res %>% 
+  kable(caption="Comparison of Bootstrap Sampling methods on t-tests")
+  
+  
+  
+
+```
+
+
+
+
