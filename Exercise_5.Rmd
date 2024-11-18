@@ -52,21 +52,6 @@ right-skewed.
 
 ## Bootstrapping
 ```{r BS non-param}
-# bootstrap.indep <- function(data.1, data.2, estimator, stat=NULL, m=10000, ...) {
-#   # compute the original test-statistic
-#   estimator(x1, x2)$statistic
-#   # generate bootstrap samples
-#   bs.samples.1 <- lapply(1:m, function(x) sample(data.1, replace = TRUE))
-#   bs.samples.2 <- lapply(1:m, function(x) sample(data.2, replace = TRUE))
-#   # compute the estimated parameters of the samples
-#   estimates <- lapply(1:m, function(i) estimator(bs.samples.1[[i]], bs.samples.2[[i]], ...))
-#   if (!is.null(stat)){
-#     estimates <- sapply(estimates, function(e) e[[stat]])
-#   }
-#   # return whatever was created here
-#   estimates
-# }
-
 
 bootstrap.t.indep <- function(data.1, data.2, m=10000, ...) {
   # compute the original test-statistic
@@ -88,14 +73,13 @@ bootstrap.t.indep <- function(data.1, data.2, m=10000, ...) {
 
 bootstrap.t.indep(x1, x2, m=30)
 ```
-Here I define a function for non-parametric bootstrapping. 
-The function takes an original sample and a set of estimators, as well as the 
-number of bootstrap samples m.  
-It generates then m different bootstrap samples, sampling from the original samples 
-with replacement and applies the specified estimator to each, returning the result finally. 
-If a certain attribute of the estimator function is wanted, e.g. `t.test()$statistic` or 
-`t.test()$p.value`, 
-this can be specified in the `stat` parameter. 
+Here I define a function for non-parametric bootstrapping as a test. 
+The function first computes the estimator, in this case the student's t-test on 
+the original two samples. It then iterates m times and each time applys
+non-parametric bootstrapping by sampling from the original samples with replacement 
+to create 2 new samples, which are compared again with t tests. 
+The t statistics of these m tests form a sort of student's t distribution, 
+for wich I calculate a p value and confidence intervals. 
 
 ```{r BS centered}
 bootstrap.t.centered <- function(data.1, data.2, m=10000) {
@@ -114,7 +98,7 @@ bootstrap.t.centered(x1, x2, m=30)
 
 ```
 The function here works similarly to the one before, it only applies 
-combined mean centering before generating samples and applying the estimators. 
+combined mean centering before generating samples and applying the estimators beforehand. 
 
 ## Applying the functions on t-tests
 ```{r}
@@ -143,7 +127,153 @@ res %>%
   
 
 ```
+Im getting p-values well over 0.9, so we are far from being able to reject the 
+null-hypothesis of the samples having different means.  
 
+
+## Permutation
+
+```{r}
+permutation_test <- function(data.1, data.2, m=4){
+  # get the t statistic of the original samples
+  t.original <- t.test(data.1, data.2)$statistic
+  # combine the datasets
+  data.combined <- c(data.1, data.2)
+  # create bootstrap samples from the combined data
+  t.bs <- sapply(1:m, function(x) {
+    # create a permutation of the combined dataset
+    permutation_idx <- sample(1:length(data.combined), size = length(data.1), replace = FALSE)
+    # get 2 samples at the sizes of the original samples
+    permutation.1 <- data.combined[permutation_idx]
+    permutation.2 <- data.combined[-permutation_idx]
+    # perform a t test and return the t statistic
+    t.test(permutation.1, permutation.2)$statistic
+  })
+  
+  # calculate the p value
+  p.value <- mean(abs(t.bs) >= abs(t.original))
+  # also get the confidence intervals, i.e. the quantiles of the t-stats
+  ci.95 <- quantile(t.bs, c(0.05, 0.95))
+  ci.99 <- quantile(t.bs, c(0.01, 0.99))
+  # return whatever was created here
+  list(p.value = p.value, ci.95 = ci.95, ci.99 = ci.99)
+  
+}
+
+
+
+results.permutation_test <- permutation_test(x1, x2, m=10000)
+
+res <- data.frame(
+  "Independed Bootstrap Sampling"=c(
+    results.permutation_test$ci.95 %>% round(4) %>% paste(collapse = " - "), 
+    results.permutation_test$ci.99 %>% round(4) %>% paste(collapse = " - "),
+    results.permutation_test$p.value
+  )
+) 
+
+rownames(res) <- c("95% Conf.Level", "99% Conf.Level", "p-Value")
+res %>% 
+  kable(caption="Permutation Sampling method on t-tests")
+  
+  
+```
+Instead of adapting the first test function I made, I implemented a new function. 
+It again creates a function that iterates m times and applies a t-test on random 
+index permutations of the combined dataset. Using the same formula as before I 
+calculate the p values and the confidence intervals on the t statistics of the 
+m students t test statistics.  
+
+The p value of the test is again ~0.9, so we are not rejecting the Null-hypothesis 
+of the two samples having different means. 
+
+## T-Test and Wilcoxon test
+```{r}
+t.test(x1, x2)
+wilcox.test(x1, x2)
+```
+The results of the base R `t.test()` also has a p-value of ~0.9, which is in line 
+with my simulated tests and my conclusion of keeping the null-hypothesis. 
+
+The p-value of the Mann-Whitney test is ~0.66, which is also high enough for us 
+not to be able to reject the null-hypothesis. 
+
+
+
+
+# Task 2
+
+```{r}
+# define function to sample the used variables from their distributions
+getx1 <- function(n=1) rnorm(n, 2, sqrt(3))
+getx2 <- function(n=1) runif(n, 2, 4)
+getx3 <- function(n=1) runif(n, -2, 2)
+gete <-  function(n=1) rt(n, df=5)
+
+# define the function y
+gety <- function(x1, x2, e){
+  3 + 2 * x1 + x2 + e
+}
+
+# Generate a sample of size n
+data <- 200 %>% 
+  data.frame(
+    x1=getx1(.),
+    x2=getx2(.),
+    x3=getx3(.),
+    e =gete(.)
+  ) %>% 
+  mutate(y=gety(x1, x2, e)) %>% 
+  select(-".") 
+
+data %>% head()
+
+
+```
+I define functions that source the variables from their respective distributions 
+and can be passed to the y function to create the model output. 
+I use piping to create a dataframe of size 200 with all parameters and the output 
+variable y. 
+
+
+## Residual bootstrap
+
+```{r}
+# fitting the linear model
+lin <- lm(y~., data=data)
+lin %>% summary()
+
+yhat <- predict(lin, data %>% select(-y))
+plot(
+  data$y,
+  yhat,
+  main="Prediction plot of the linear model", ylab="predicted", xlab="observed"
+)
+```
+In the linear model, all included variables are significant, even x3, which played 
+no part in creating the output variable and essentially distorts the data, but its 
+coefficient is nearly zero.  
+Looking at the prediction plot, we can tell that the model is nearly perfect and 
+the predictions form a perfectly straight line when plotted against the actual y values. 
+
+```{r}
+# get the residuals
+residuals <- resid(lin)
+# create the bootstrap sample
+bootstrap.coefficients <- function(yhat, residuals, m=10000){
+    # generate new residuals via bootstrapping, m times
+    residuals.resampled <- sapply(1:m, function(x) sample(residuals, replace = TRUE))
+    # create new predictions by adding the sampled residuals
+    yhat.bootstrapped <- sapply(residuals.resampled, function(rs) yhat + rs)
+    # fit a new model to the bootstrapped predictions, without using e (epsilon)
+    new.model <- lm(yhat.bootstrapped ~ x1 + x2 + x3, data=data)
+    # return the coefficients of the bootstrapped model
+    coef(new.model)
+}
+
+bootstrap.coefficients(yhat, residuals)
+
+```
 
 
 
