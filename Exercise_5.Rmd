@@ -204,27 +204,20 @@ not to be able to reject the null-hypothesis.
 # Task 2
 
 ```{r}
+n <- 200
+
 # define function to sample the used variables from their distributions
-getx1 <- function(n=1) rnorm(n, 2, sqrt(3))
-getx2 <- function(n=1) runif(n, 2, 4)
-getx3 <- function(n=1) runif(n, -2, 2)
-gete <-  function(n=1) rt(n, df=5)
+x1 <- rnorm(n, mean = 2, sd = sqrt(3)) 
+x2 <- runif(n, 2, 4)                   
+x3 <- runif(n, -2, 2)                  
+e <- rt(n, df = 5)                     
 
 # define the function y
-gety <- function(x1, x2, e){
-  3 + 2 * x1 + x2 + e
-}
+# Model: y = 3 + 2*x1 + x2 + e
+y <- 3 + 2 * x1 + x2 + e               
 
 # Generate a sample of size n
-data <- 200 %>% 
-  data.frame(
-    x1=getx1(.),
-    x2=getx2(.),
-    x3=getx3(.),
-    e =gete(.)
-  ) %>% 
-  mutate(y=gety(x1, x2, e)) %>% 
-  select(-".") 
+data <- data.frame(y = y, x1 = x1, x2 = x2, x3 = x3)
 
 data %>% head()
 
@@ -239,41 +232,133 @@ variable y.
 ## Residual bootstrap
 
 ```{r}
+# custom rmse function
+get_rmse <- function(model, r=4) sqrt(mean(model$residuals^2)) %>% round(r)
+
 # fitting the linear model
-lin <- lm(y~., data=data)
+lin <- lm(y ~ x1 + x2 + x3, data=data)
 lin %>% summary()
 
 yhat <- predict(lin, data %>% select(-y))
 plot(
   data$y,
   yhat,
-  main="Prediction plot of the linear model", ylab="predicted", xlab="observed"
+  main="Prediction plot of the linear model — RMSE:" %>% paste(., get_rmse(lin)), 
+  ylab="predicted", xlab="observed"
 )
+abline(coef = c(0,1), col="red")
 ```
 In the linear model, all included variables are significant, even x3, which played 
 no part in creating the output variable and essentially distorts the data, but its 
-coefficient is nearly zero.  
-Looking at the prediction plot, we can tell that the model is nearly perfect and 
-the predictions form a perfectly straight line when plotted against the actual y values. 
+coefficient is also the smallest.  
+Just visually, the fit is fine. I also report the RMSE in the heading.
 
-```{r}
+## Residual Bootstrap Regression
+```{r Residual Bootstrap Regression}
 # get the residuals
-residuals <- resid(lin)
+residuals <- lin$residuals
 # create the bootstrap sample
-bootstrap.coefficients <- function(yhat, residuals, m=10000){
+
+residual.bootstrap.coeffs <- function(data, yhat, residuals, m=1000){
     # generate new residuals via bootstrapping, m times
-    residuals.resampled <- sapply(1:m, function(x) sample(residuals, replace = TRUE))
-    # create new predictions by adding the sampled residuals
-    yhat.bootstrapped <- sapply(residuals.resampled, function(rs) yhat + rs)
-    # fit a new model to the bootstrapped predictions, without using e (epsilon)
-    new.model <- lm(yhat.bootstrapped ~ x1 + x2 + x3, data=data)
+    residuals.resampled <- sapply(1:m, function(j) sample(residuals, replace = TRUE))
+    # we now get a matrix (n, m), where n is the size of the original sample
+    # and m is the number of bootstraps were doing, e.g. 1000
+    # create new predictions by adding the sampled residuals to the yhat
+    # do this by adding the columns of residuals.resampled to the yhat
+    yhat.bootstrapped <- apply(residuals.resampled, 2, function(rs) rs + yhat)
+    # now we have another (n, m) matrix
+    # fit a new model to each of the bootstrapped predictions, 
+    # without using e (epsilon)
+    new.models <- lapply(1:m, function(j) lm(yhat.bootstrapped[,j] ~ x1 + x2 + x3, data=data))
+    # we now have m different model objects and now we extract their coefficients
     # return the coefficients of the bootstrapped model
-    coef(new.model)
+    coeffs <- lapply(new.models, coef) %>% 
+      do.call(rbind, .)
+    # we now have a matrix of size (m, 4), where the 4 are the coefficients incl intercept
+    coeffs
+    # now extract the quantiles for each of the 4 coefficients
+    apply(coeffs, 2, function(b) quantile(b, probs=c(0.05, 0.95)))
+    
+
 }
 
-bootstrap.coefficients(yhat, residuals)
+residual.bootstrap.coeffs(data, yhat, residuals)
 
 ```
+In the chunk above I define a test that takes the residuals of a linear model 
+and creates m bootstrap samples by sampling with replacement from them. 
+These resampled residuals are then added as not-so-random noise to the 
+predicted response of the former linear model. By then trying to again fit 
+m different models to these adjusted y values, we are simulating a correction of 
+the models to the y values corrected by the residuals, i.e. nudging them around in 
+the range of the actually observed values.  
+The m different models then have each 4 coefficients, and each of them has m different 
+versions, for which I then grab the confidence intervals.  
+
+Since the confidence interval of the x3 variable is centered around 0, I presume 
+that it is not really necessary  for the model, even though it was found as 
+significant by the `lm()` function. 
+
+
+
+## Pairs Bootstrap Regression
+```{r Pairs Bootstrap Regression}
+
+# create the bootstrap sample
+pairs.bootstrap.coeffs <- function(data, m=1000){
+    bootstrap.samples <- lapply(1:m, function(j) data[sample(1:nrow(data), replace = TRUE),])
+    # print(bootstrap.samples %>% length())
+    # print(bootstrap.samples[[2]])
+    # we now got m different resampled dataframes
+    # now refit new models with them
+    new.models <- lapply(bootstrap.samples, function(d) lm(y ~ x1 + x2 + x3, data=d))
+    # we now have m models
+    # now extract their coefficients and turn them into a matrix
+    coeffs <- lapply(new.models, coef) %>% 
+      do.call(rbind, .)
+    # now extract the quantiles for each of the 4 coefficients
+    apply(coeffs, 2, function(b) quantile(b, probs=c(0.05, 0.95)))
+    
+
+}
+
+pairs.bootstrap.coeffs(data)
+
+```
+
+In this chunk I define a test that resamples from the original dataset, instead of the 
+residuals. It samples rows of the dataset with replacement, exactly as many rows 
+as the original dataset had. Then it fits the new data in a new linear model. 
+All that is repeated m times and then coefficients' distributions' confidence intervals 
+are returned.  
+In this case, the confidence interval of the variable x3 is no longer surrounding 0, 
+so if I didnt know any better, I'd presume that this time around that the 
+true model likely even includes this variable. Other than that the confidence intervals 
+are very close to what they have been in the residual approach. 
+
+
+## Approach comparison
+The first approach sampled from the results of an initial model fitting, whereas 
+the second sampled the original data. I there assume, that the first approach 
+makes some kind of assumption that the model was already doing something right, 
+like for example variable selection. The second approach on the other hand has 
+never even seen any model before.  
+The first approach, while bootstrap sampling always uses the same predictors and 
+input data, but always to predict something slightly different, whereas the 
+second always tries to predict the same output using different permutations of 
+its original input everytime. 
+
+
+
+# Summary
+
+Bootstrapping is a method where we create many new samples from our data by either resampling the data directly (non-parametric) or generating samples based on an assumed model (parametric). We use these samples to calculte confidence intervals, test statistics, or model estimtes. Parametric bootstrap assumes a specific distribution, which can give more precise results if the assumption is correct but may give misleading results if the model is wrong. Non-parametric bootstrap is flexible and works well for any dataset, but it may require more computational effort and does not smooth out sampling noise. Bootstrapping is powerful because it relies on the data itself to understand variability and does not need complex formulas for confidence bounds or tests.
+
+
+
+
+
 
 
 
