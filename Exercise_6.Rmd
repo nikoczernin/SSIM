@@ -1,0 +1,359 @@
+---
+title: "SSCM Exercise 6"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+library(knitr)
+library("ISLR")
+library("boot")
+
+# Custom print function
+print_ <- function(...) print(paste(...))
+
+set.seed(11721138)
+```
+
+```{r}
+Auto %>% summary()
+```
+# Task 1
+
+## Fitting basic models
+
+```{r}
+# get the sorted indices of the predictor to allow for smooth line display later
+idx.sorted <- order(Auto$horsepower)
+
+# fit the models
+model.1 <- lm(mpg ~ horsepower, data=Auto)
+model.2 <- lm(mpg ~ poly(horsepower,2), data=Auto)
+model.3 <- lm(mpg ~ poly(horsepower,3), data=Auto)
+
+# plot the predictor against the response
+plot(Auto$mpg ~ Auto$horsepower,)
+lines(Auto$horsepower[idx.sorted], fitted(model.1)[idx.sorted], col='red')
+lines(Auto$horsepower[idx.sorted], fitted(model.2)[idx.sorted], col='green')
+lines(Auto$horsepower[idx.sorted], fitted(model.3)[idx.sorted], col='blue')
+
+```
+I use the lm() function to fix the 3 models. 
+To plot them, I sort the points by the sorted indices of the horsepower variable.  
+
+The red line is the linear model, the green line is the quadratic model and the 
+blue line is the cubic model. The polynomial models match curve-shape of the 
+data nicely. 
+
+## Validation set approach
+### Train-Test splitting
+```{r}
+idx.train.50 <- sample(1:nrow(Auto), nrow(Auto)*0.5)
+idx.train.70 <- sample(1:nrow(Auto), nrow(Auto)*0.7)
+```
+I generate a sample of the row indices, the size of 50% and 70% of the whole dataset. 
+```{r}
+train.50 <- Auto[idx.train.50,]
+test.50 <- Auto[-idx.train.50,]
+train.70 <- Auto[idx.train.70,]
+test.70 <- Auto[-idx.train.70,]
+```
+To generate the train and test data sets, I use the generated indices. 
+```{r}
+# fit the models
+model.1.50 <- lm(mpg ~ horsepower, data=train.50)
+model.2.50 <- lm(mpg ~ poly(horsepower,2), data=train.50)
+model.3.50 <- lm(mpg ~ poly(horsepower,3), data=train.50)
+model.1.70 <- lm(mpg ~ horsepower, data=train.70)
+model.2.70 <- lm(mpg ~ poly(horsepower,2), data=train.70)
+model.3.70 <- lm(mpg ~ poly(horsepower,3), data=train.70)
+```
+
+```{r}
+get_rmse <- function(y, yhat) sqrt(mean((y - yhat)^2)) 
+get_mse <- function(y, yhat) mean((y - yhat)^2)
+get_mad <- function(y, yhat) median(abs(y - yhat))
+```
+These 3 function each take in the response and predicted response and return 
+the wanted evaluation metrics.
+
+### Comparing the models
+```{r}
+# make predictions for every model and report their performances
+yhat.1.50 <- predict(model.1.50, test.50)
+yhat.2.50 <- predict(model.2.50, test.50)
+yhat.3.50 <- predict(model.3.50, test.50)
+yhat.1.70 <- predict(model.1.70, test.70)
+yhat.2.70 <- predict(model.2.70, test.70)
+yhat.3.70 <- predict(model.3.70, test.70)
+
+task1.results <- data.frame(
+  Model=c("Linear 50/50","Quadratic 50/50","Cubic 50/50","Linear 70/30","Quadratic 70/30","Cubic 70/30"),
+  RMSE=c(get_rmse(test.50$mpg, yhat.1.50), 
+         get_rmse(test.50$mpg, yhat.2.50), 
+         get_rmse(test.50$mpg, yhat.3.50), 
+         get_rmse(test.70$mpg, yhat.1.70), 
+         get_rmse(test.70$mpg, yhat.2.70), 
+         get_rmse(test.70$mpg, yhat.3.70)
+  ),
+  MSE=c( get_mse(test.50$mpg, yhat.1.50), 
+         get_mse(test.50$mpg, yhat.2.50), 
+         get_mse(test.50$mpg, yhat.3.50), 
+         get_mse(test.70$mpg, yhat.1.70), 
+         get_mse(test.70$mpg, yhat.2.70), 
+         get_mse(test.70$mpg, yhat.3.70)
+  ),
+  MAD=c( get_mad(test.50$mpg, yhat.1.50), 
+         get_mad(test.50$mpg, yhat.2.50), 
+         get_mad(test.50$mpg, yhat.3.50), 
+         get_mad(test.70$mpg, yhat.1.70), 
+         get_mad(test.70$mpg, yhat.2.70), 
+         get_mad(test.70$mpg, yhat.3.70)
+  )
+) 
+
+task1.results %>% arrange(RMSE) %>% kable()
+
+```
+The 50/50-split linear model, and generally the linear models over the others, 
+had the worst performances of all. 
+The 70/30-split quadratic model performed best regarding all error measures, 
+in second place came the cibic model with the same training split. 
+
+
+#### Applying Cross-Validation
+```{r}
+formeln <- list(
+  "linear"=mpg ~ horsepower,
+  "quadratic" = mpg ~ poly(horsepower, 2) ,
+  "cubic" = mpg ~ poly(horsepower, 3)
+)
+
+# get cv error
+get.cv.error <- function(formel, data, K=NULL){
+  if (is.null(K)) K <- nrow(data)
+  model <- glm(formel, data=data)
+  cv = cv.glm(data, model)
+  # the first value is the prediction error
+  cv$delta[1]
+}
+
+task1.results <- task1.results %>% bind_cols(
+  data.frame(
+    LOO_error=c(
+      # formeln %>% sapply(function(f) get.cv.error(f, Auto)),
+      formeln %>% sapply(function(f) get.cv.error(f, Auto)) %>% rep(2)
+    ),
+    CV5_error=c(
+      # formeln %>% sapply(function(f) get.cv.error(f, Auto, K=5)),
+      formeln %>% sapply(function(f) get.cv.error(f, Auto, K=5))%>% rep(2)
+    ),
+    CV10_error=c(
+      # formeln %>% sapply(function(f) get.cv.error(f, Auto, K=10)),
+      formeln %>% sapply(function(f) get.cv.error(f, Auto, K=10))%>% rep(2)
+    )
+  )
+)
+
+
+
+task1.results %>% arrange(RMSE)  %>% kable()
+
+
+
+
+
+```
+I iterate over the formulas this time around, as another coding workflow. 
+I compute a generalized linear model and apply 1-fold (leave-one-out), 5-fold 
+and 10-fold cross validation and extract the prediction error for all 6 models 
+from before.  
+
+After performing cross validation, it seems like the 50/50-split models actually 
+generalize a little better, as their prediction errors for any number of 
+cross-correlation folds is lower than for the other models, even though their 
+RMSE may not be the best of them in the first test. 
+
+
+I presume that in this case the models in the earlier tasks may have overfit to the 
+fixed random split of the data. Cross correlation is meant to avoid this issue 
+by testing the model multiple times to test k splits of the data, thus treating 
+different subsets of the data as validtaion observations each time and getting 
+closest to a real world scenario, where generalization would be most important.  
+
+In the first case, we provide no parameter K, which prompts the model to do 
+leave-one-out cross correlation, which is essentially n-fold, where n is the number 
+of observations in the data. It picks out a single observation from the data and 
+makes only a prediction test on that single observation. 
+In the second and third case, we make 5 and 10 equally-sized data-splits respectively. 
+
+
+
+
+# Task 2
+
+```{r}
+economics %>% summary()
+?economics
+```
+## Basic models
+
+```{r}
+plot(uempmed ~ unemploy, data=economics)
+plot(unemploy ~ uempmed, data=economics)
+```
+
+```{r}
+# sorted ids of unemploy for plotting
+idx.daysbyemp.1 <- order(economics$unemploy)
+# fitting the models
+daysbyemp.1 <- lm(uempmed ~ unemploy, data=economics)
+daysbyemp.log <- lm(uempmed ~ log(unemploy), data=economics)
+daysbyemp.2 <- lm(uempmed ~ poly(unemploy, 2), data=economics)
+daysbyemp.3 <- lm(uempmed ~ poly(unemploy, 3), data=economics)
+daysbyemp.10 <- lm(uempmed ~ poly(unemploy, 10), data=economics)
+
+# plot the predictor against the response
+plot(economics$unemploy, economics$uempmed)
+lines(economics$unemploy[idx.daysbyemp.1], fitted(daysbyemp.1)[idx.daysbyemp.1], col='red')
+lines(economics$unemploy[idx.daysbyemp.1], fitted(daysbyemp.log)[idx.daysbyemp.1], col='blue')
+lines(economics$unemploy[idx.daysbyemp.1], fitted(daysbyemp.2)[idx.daysbyemp.1], col='green')
+lines(economics$unemploy[idx.daysbyemp.1], fitted(daysbyemp.3)[idx.daysbyemp.1], col='purple')
+lines(economics$unemploy[idx.daysbyemp.1], fitted(daysbyemp.10)[idx.daysbyemp.1], col='orange')
+# add a legend
+legend("topleft", legend = c("Linear", "Logarithmic", "Poly 2", "Poly 3", "Poly 10"),
+       col = c("red", "blue", "green", "purple", "orange"), lty = 1:5, lwd = 2)
+
+```
+Again, I had to sort the indices of the x-axis to display smooth lines. 
+The "real" model of the data is not obvious because of the two line-patterns 
+visible on the right end, which makes the decision of the "best" model difficult. 
+
+```{r}
+# sorted ids of unemploy for plotting
+idx.daysbyemp.1 <- order(economics$uempmed)
+# fitting the models
+empbydays.1.1 <- lm(unemploy ~ uempmed, data=economics)
+empbydays.1.log <- lm(log(unemploy) ~ uempmed, data=economics)
+empbydays.1.2 <- lm(unemploy ~ poly(uempmed, 2), data=economics)
+empbydays.1.3 <- lm(unemploy ~ poly(uempmed, 3), data=economics)
+empbydays.1.10 <- lm(unemploy ~ poly(uempmed, 10), data=economics)
+
+# plot the predictor against the response
+plot(economics$uempmed, economics$unemploy)
+lines(economics$uempmed[idx.daysbyemp.1], fitted(empbydays.1.1)[idx.daysbyemp.1], col='red')
+lines(economics$uempmed[idx.daysbyemp.1], fitted(empbydays.1.log)[idx.daysbyemp.1], col='blue')
+lines(economics$uempmed[idx.daysbyemp.1], fitted(empbydays.1.2)[idx.daysbyemp.1], col='green')
+lines(economics$uempmed[idx.daysbyemp.1], fitted(empbydays.1.3)[idx.daysbyemp.1], col='purple')
+lines(economics$uempmed[idx.daysbyemp.1], fitted(empbydays.1.10)[idx.daysbyemp.1], col='orange')
+# add a legend
+legend("topleft", legend = c("Linear", "Exponential", "Poly 2", "Poly 3", "Poly 10"),
+       col = c("red", "blue", "green", "purple", "orange"), lty = 1:5, lwd = 2)
+
+```
+### Performing cross-validation
+```{r}
+# Predicting number of unemployed days by number of unemployed
+
+# fitting the models
+data.frame(
+  model=c("linear", "logarithmic", "quadratic", "cubic", "^10"),
+  LOO_mse = c(
+    glm(uempmed ~ unemploy, data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(uempmed ~ log(unemploy), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 2), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 3), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 10), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1]
+  ),
+  CV5_mse = c(
+    glm(uempmed ~ unemploy, data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(uempmed ~ log(unemploy), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 2), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 3), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 10), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1]
+  ),
+  CV10_mse = c(
+    glm(uempmed ~ unemploy, data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(uempmed ~ log(unemploy), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 2), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 3), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(uempmed ~ poly(unemploy, 10), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1]
+  )
+) %>% 
+  mutate(
+    LOO_rmse=sqrt(LOO_mse),
+    CV5_rmse=sqrt(CV5_mse),
+    CV10_rmse=sqrt(CV10_mse),
+    ) %>%
+  kable()
+
+
+```
+
+The first results show that the linear model underfits the data with high errors, 
+while the logarithmic model performs even worse, showing it is not suitable. 
+The quadratic and cubic models perform similarly, with the quadratic model 
+slightly better. The 10th-degree polynomial has the lowest errors but risks 
+overfitting due to its high complexity.
+
+
+
+```{r}
+# Predicting number of unemployed days by number of unemployed
+
+# fitting the models
+data.frame(
+  model=c("linear", "logarithmic", "quadratic", "cubic", "^10"),
+  LOO_mse = c(
+    glm(unemploy ~ uempmed, data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(log(unemploy) ~ uempmed, data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 2), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 3), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 10), data=economics) %>% cv.glm(economics, .) %>% .$delta %>% .[1]
+  ),
+  CV5_mse = c(
+    glm(unemploy ~ uempmed, data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(log(unemploy) ~ uempmed, data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 2), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 3), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 10), data=economics) %>% cv.glm(economics, ., K=5) %>% .$delta %>% .[1]
+  ),
+  CV10_mse = c(
+    glm(unemploy ~ uempmed, data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(log(unemploy) ~ uempmed, data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 2), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 3), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1],
+    glm(unemploy ~ poly(uempmed, 10), data=economics) %>% cv.glm(economics, ., K=10) %>% .$delta %>% .[1]
+  )
+) %>% 
+  mutate(
+    LOO_rmse=sqrt(LOO_mse),
+    CV5_rmse=sqrt(CV5_mse),
+    CV10_rmse=sqrt(CV10_mse),
+    ) %>%
+  kable()
+
+
+```
+
+The logarithmic model performs exceptionally well with very low errors, while all other models, 
+including the quadratic, cubic, and 10th-degree, have much higher errors. 
+This suggests that the logarithmic relationship is more appropriate for this direction.
+
+
+Cross-validation helps identify underfitting (simple models like linear) and 
+overfitting (complex models like the 10th-degree polynomial). 
+Leave-one-out cross validation (LOO) is very precise but computationally expensive, 
+because it computes results for each row of the dataset. 
+while 5-fold and 10-fold CV are faster and still effective. 
+The best model generally should balance errors across all CV methods, 
+showing both good fit and generalizability.
+
+
+
+
+
+
