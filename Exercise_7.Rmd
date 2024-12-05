@@ -1,0 +1,26 @@
+---
+title: "SSCM Exercise 6"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+library(knitr)
+library("ISLR")
+library("boot")
+
+# Custom print function
+print_ <- function(...) print(paste(...))
+
+set.seed(11721138)
+```
+
+```{r}
+
+
+
+```
+
