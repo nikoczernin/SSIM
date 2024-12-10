@@ -9,18 +9,216 @@ fig_height: 4
 ```{r}
 library("tidyverse")
 library(knitr)
-library("ISLR")
-library("boot")
-
+library(glmnet)
 # Custom print function
 print_ <- function(...) print(paste(...))
 
 set.seed(11721138)
 ```
 
+
+```{r}
+soft <- function(a, b){
+  product <- sign(a) * (abs(a) - b)
+  max(product, 0)
+}
+
+```
+This function performs soft thresholding on the two inputs, according to this formula:  
+$soft(a, b)=max(0, (sign(a)*(|a|-b)))$.  
+
+
+# Task 1
+
+## Defining a function for the shooting alrogithm. 
 ```{r}
 
+lasso_shooting <- function(X, y, lambda, tolerance_limit=1e-07, max_iter=1e+05, verbose=F){
+  n <- nrow(X)
+  p <- ncol(X)
+  # do normal least squares estimation to get starting coefficients
+  # remove intercept for scaled data
+  baseline_coeffs <- lm(y ~ X) %>% .$coef %>%  as.numeric()
+  # exluce the intercept from beta
+  beta <- baseline_coeffs %>% .[-1]
+  beta0 <- baseline_coeffs %>% .[1]
+  
+  # center the y_data by the intercept
+  y.centered <- y - beta0
+  
+  if (verbose)print("Starting coefficients:")
+  if (verbose)print(beta)
+  # iterate over the maximum iterations, 
+  # this is like a while loop with automatic max iter stopping
+  for (iter in 1:max_iter) {
+    # rename the previouscoefficients
+    beta_previous <- beta
+    # now we iterate over all coefficients and update them
+    for (j in 1:p){
+      # get aj
+      aj <- 2 * sum(X[,j] ^ 2)
+      # get cj
+      cj <- 2 * sum(X[,j] * (y.centered - X %*% beta_previous + beta_previous[j] * X[,j]))
+      # apply soft thresholding to get a new beta
+      # this is the jth coefficient in the new beta
+      beta[j] <- soft(cj/aj, lambda/aj)
+    }
+    # check i fstopping cirterion is met
+    if (sum(abs(beta - beta_previous)) < tolerance_limit) {
+      if (verbose)print_("Stopping early at iteration", iter)
+      break
+    }
+  }
+  # put the intercept back into the coefficients
+  beta <- c(beta0, beta)
+  beta
+}
 
 
+```
+
+
+The function first does normal least squares fitting on the data to get the initial 
+coefficients to regularize, using the lm() function. I then remove the intercept 
+from the initial coefficients and substract it from the response, centering it 
+around the intercept. Then I create a for loop, iterating for the maximum iterations 
+passed as a parameter.  
+Inside, I iterate over p, i.e. each coefficient $beta_j$. I compute both variables
+$a_j$ and $c_j$ and apply the soft-threshold-function defined above to get the 
+new coefficient $beta_j$. 
+After each outer iteration, after getting all new betas, I check, if the sum of changes 
+of the coefficients is small enough to stop early.  
+Finally, I reappend the intercept to the new coefficients. 
+
+The default values for the tolerance limit and maximum number of iterations is 
+the same values that glmnet uses as default parameters too. 
+
+## Defining a function to test different lambda values
+```{r}
+lambdas <- seq(0, 1, 0.05)
+
+get_lasso_coeffs <- function(X, y, lambdas, tolerance_limit=1e-07, max_iter=1e+05, verbose=F){
+  lambdas %>% 
+    sapply( function(l) lasso_shooting(X, y, l, tolerance_limit, max_iter, verbose)) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    mutate(lambda = lambdas) %>% 
+    select(lambda, everything())
+}
+```
+
+
+In this function I iterate over the given lambdas values and apply the lasso 
+function defined above to the lambda values and the other parameters. 
+I then only transpose the output and add the lambda values to get a nice dataframe finally. 
+
+
+## Comparing our implementation with glmnet
+
+### Generating sample data
+```{r}
+n <- 100  # num of observations
+p <- 10   # num of variables
+
+# generate variables
+# start with random noise in a matrix with the wanted shape
+X <- matrix(rnorm(n * p), n, p)
+# now generate some random integers, they will be the "correct" coefficients
+beta_true <- sample(seq(-3, 3), p, replace = TRUE)
+# now do matrix multiplication with the coefficients and the features, then add more random noise
+y <- X %*% beta_true + rnorm(n)
+# for the lambdas, get 20 values between 0 and 1
+lambdas <- seq(0, 1, 0.05)
+
+
+```
+
+
+```{r}
+lasso_coeffs <- get_lasso_coeffs(X, y, lambdas) 
+lasso_coeffs
+```
+
+```{r}
+fit_glmnet <- glmnet(X, y, alpha=1, lambda=lambdas)
+
+get_glmnet_coeffs <- function(X, y, lambdas, custom_colnames=NULL){
+  out <- fit_glmnet %>% 
+    coef() %>% 
+    t() %>% 
+    as.matrix() %>% 
+    as.data.frame() %>% 
+    mutate(lambda = lambdas) %>% 
+    select(lambda, everything())
+  rownames(out) <- NULL
+  if (!is.null(custom_colnames)) colnames(out) <- custom_colnames
+  out
+}
+custom_colnames <- colnames(lasso_res)
+glmnet_coeffs <- get_glmnet_coeffs(X, y, lambdas, custom_colnames)
+glmnet_coeffs
+```
+
+The previous two outputs print the coefficients of the sample data after first
+ using my own lasso function and then using glmnet(). The former reduces sometimes more 
+ variable down to zero than our shooting algorithm function.  
+ 
+ Now, lets compare their evaluation performances on the training data.
+ 
+```{r}
+MSE <- function(y, yhat){
+  mean((y - yhat)^2)
+}
+```
+This function computes the MSE of a model by taking its true response and predictions. 
+
+```{r}
+make_prediction <- function(X, beta){
+  # to include the intercept, add an identity column to X
+  cbind(1, X) %*% beta
+}
+
+```
+This function takes the feature matrix X and multiplys it with the model coefficients, 
+which produces the response. The coefficients include the intercept, so they have 1 value more 
+than there are columns in the feature matrix, so you need to add a column of 1s to the 
+beginning of the feature matrix. 
+
+```{r}
+evaluate <- function(y, X, beta){
+  MSE(y, make_prediction(X, beta))
+}
+```
+This function just combines the two defined above. 
+
+```{r}
+lasso_coeffs$MSE <- apply(lasso_coeffs, 1, function(row) evaluate(y, X, row[-1]))
+glmnet_coeffs$MSE <- apply(glmnet_coeffs, 1, function(row) evaluate(y, X, row[-1]))
+lasso_coeffs
+glmnet_coeffs
+```
+The higher the regularization parameter lambda is, the lower the MSE is for the 
+respective coefficients of the glmnet function. This is not so strongly 
+the case for our own algorithm, suspiciously, the MSE is always almost the same. 
+
+
+## Writing a custom cross-validation function
+```{r}
+cv.glmnet(X, y)
+```
+
+```{r}
+k <- 10
+n <- nrow(X)
+folds <- sample(rep(1:k, length.out=n))
+
+# create anempty matrix for all MSE results
+mse_results <- matrix(0, nrow=length(lambdas), ncol=k)
+
+# do the k-fold CV
+for (fold in 1:k){
+  # split data into training and testing sets
+  train_idx
+}
 ```
 
