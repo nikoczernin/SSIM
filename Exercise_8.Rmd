@@ -1,0 +1,43 @@
+---
+title: "SSCM Exercise 8"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+library(knitr)
+
+# Custom print function
+print_ <- function(...) print(paste(...))
+
+set.seed(11721138)
+```
+
+```{r}
+# list.of.packages <- c('ggplot2','dplyr',"tidyr",'lattice',"Pareto","HDInterval","rstanarm","rstan","rjags","bayess","MCMCpack","MASS","data.table","bayesreg","boot","MCMCvis","Rgraphviz","graph","invgamma")
+# new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+# if(length(new.packages)) install.packages(new.packages)
+# # INLA
+# install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+# inla.upgrade()
+# install.packages("BiocManager")
+
+library(Pareto)
+library(HDInterval)
+library(rstanarm)
+library(rjags)
+library(bayess)
+library(MCMCpack)
+library(INLA)
+library(data.table)
+library(MASS)
+library(bayesreg)
+library(boot)
+library(MCMCvis)
+library(dplyr)
+library(invgamma)
+```
+
