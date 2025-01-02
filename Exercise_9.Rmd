@@ -1,0 +1,171 @@
+---
+title: "SSCM Exercise 9"
+author: "Nikolaus Czernin - 11721138"
+output: pdf_document
+fig_height: 4 
+
+---
+
+```{r}
+library("tidyverse")
+library("knitr")
+library("mcmcplots")
+library("gridExtra")
+
+# Custom print function
+print_ <- function(...) print(paste(...))
+
+set.seed(11721138)
+```
+
+```{r}
+# parameters of the bivariate distribution
+means <- c(0, 0)
+p <- 0.5 # this is actually "rho", but I use p because its easier to spot
+covariances <- matrix(c(1, p, p, 1), nrow = 2)
+# Markov chain size
+M <- 30000
+```
+
+# Gibbs Sampling
+We iteratively sample $\theta_1$ given $\theta_2$ (and vice versa)
+```{r}
+gibbs_sampler <- function(M, rho){
+  # create empty number variables for the parameters, of size M
+  theta_1 <- numeric(M)
+  theta_2 <- numeric(M)
+  # initialize random starting values
+  theta_1 <- rnorm(1)
+  theta_2 <- rnorm(1)
+  # make the following M-1 iterations
+  # use t as iterating variable, like in the slides
+  for (t in 2:M){
+    # sample using the conditional distributions
+    # sample theta_1 given theta_2, save the result as the ith value
+    theta_1[t] <- rnorm(1, mean = p * theta_2[t-1], sd = sqrt(1 - p^2))
+    # sample theta-2 given theta_1, ...
+    theta_2[t] <- rnorm(1, mean = p * theta_1[t], sd = sqrt(1 - p^2))
+  }
+  data.frame(theta_1 = theta_1, theta_2 = theta_2)
+}
+gibbs_data <- gibbs_sampler(M, p)
+plot(gibbs_data$theta_1, gibbs_data$theta_2)
+
+```
+Here I create a Gibbs sampling algorithm. It creates a sample of size M for all 
+wanted parameters (in our case 2). 
+It initializes the sample witha random value of standard normal distribution. 
+Then it iteratively updates both parameters, using the existing sample of the 
+other respective parameter as a conditional. 
+
+```{r}
+target_pdf <- function(theta_1, theta_2, rho){
+  # TODO: I think the first fraction can be omitted because it is contant 
+  # for all samples, but Im not sure so just leave it
+  1 / (2*pi*sqrt(1-rho^2)) * exp(-1 / (2*(1-rho^2)) * (theta_1^2 - 2*rho*theta_1 * theta_2 + theta_2^2))
+}
+```
+This function is the probability density function of th etask. 
+
+```{r}
+metropolis_hastings <- function(M, rho){
+  # create empty theta 1 and theta 2
+  theta_1 <- numeric(M)
+  theta_2 <- numeric(M)
+  # their first values are random
+  theta_1[1] <- rnorm(1)
+  theta_2[1] <- rnorm(1)
+  print(theta_1[1] == theta_2[1])
+  # iterate over the remaining M-1 sampels
+  for (t in 2:M){
+    # generate candidate thetas
+    candidate_1 <- rnorm(1, mean = theta_1[t-1], sd = 0.5)
+    candidate_2 <- rnorm(1, mean = theta_2[t-1], sd = 0.5)
+    # compuite the probability of accepting the candidate
+    alpha <- target_pdf(candidate_1, candidate_2, rho) / 
+      target_pdf(theta_1[t-1], theta_2[t-1], rho)
+    # generate u from uniform distribution
+    u <- runif(1, 0, 1)
+    if (u < alpha){
+      # accept the candidates as new parameters
+      theta_1[t] <- candidate_1
+      theta_2[t] <- candidate_2
+    } else {
+      # keep the previous parameters
+      theta_1[t] <- theta_1[t-1]
+      theta_2[t] <- theta_2[t-1]
+    }
+  }
+  # return all parameters
+  data.frame(theta_1 = theta_1, theta_2 = theta_2)
+}
+
+
+mh_data <- metropolis_hastings(M, p)
+
+# Plot samples
+plot(mh_data$theta_1, mh_data$theta_2)
+
+```
+Here I implement the Metropolis-Hastings algorithm to simulate the distribution 
+from the task. I, again, start with 2 empty vectors of size M and randomly 
+initialize the first parameters from the standard normal distribution. 
+Then I iteratively generate new candidates by randomly deviating from the previous 
+iteration's parameters. Then i compute an acceptance ratio from the probability 
+density function defined before. Like in the acceptance-rejection method, I 
+generate a random uniform variable and use it to determine, whether the new 
+parameter candidate ratio makes them eligible and based on this decision I 
+update this iteration's parameters. 
+
+# Diagnostics
+```{r}
+diagnostics <- function(t1, t2){
+  par(mfrow=c(2, 2))
+  plot(1:M, t1, type="l", 
+       ylim=c(min(t1,mean(t1)-3*sd(t1)),
+              max(t1,mean(t1)+3*sd(t1))),
+       ylab=expression(paste(theta,"1")), 
+       cex.main=2,
+       main=expression(paste("Traceplot ",theta,"2")))
+  abline(h=mean(t1), col="blue");
+  abline(h=mean(t1)+3*sd(t1), lty=3, col="red")
+  abline(h=mean(t1)-3*sd(t1), lty=3, col="red")
+  
+  plot(1:M, t2, type="l", 
+       ylim=c(min(t2,mean(t2[-(1:200)]) - 3*sd(t2[-(1:200)])),
+              max(t2, mean(t2[-(1:200)]) + 3*sd(t2[-(1:200)]))),
+       ylab=expression(paste(theta,"2")),
+       main=expression(paste("Traceplot ",theta,"2")))
+  abline(h=mean(t2[-(1:200)]), col="blue")
+  abline(h=mean(t2[-(1:200)]) + 3*sd(t2[-(1:200)]), lty=3, col="red")
+  abline(h=mean(t2[-(1:200)]) - 3*sd(t2[-(1:200)]), lty=3, col="red")
+  
+  # ACF plots with run mean
+  acf(t1, lag.max=100, main=expression(paste("ACF plot ",theta,"1")))
+  acf(t2, lag.max=100, main=expression(paste("ACF plot ",theta,"2")))
+  
+  
+  # histrograms of marginal posteriors
+  m1 <- rmeanplot(t1, main=expression(paste("Run mean for ", theta, "1")))
+  m2 <- rmeanplot(t2, main=expression(paste("Run mean for ", theta, "2")))
+
+  
+  par(mfrow=c(1,2),mar=c(5,5,4,2))
+  hist(t1, freq=F, col="grey", main="Histogram", xlab=expression(paste(theta,"1")))
+  curve(dnorm(x,0,1), from=-4, 4, add=T, col="red")
+  hist(t2, freq=F, col="grey", main="Histogram", xlab=expression(paste(theta,"2")))
+  curve(dnorm(x,0,1), from=-4, 4, add=T, col="red")
+}
+
+```
+
+```{r, fig.height=8}
+diagnostics(gibbs_data$theta_1, gibbs_data$theta_2)
+
+```
+
+```{r, fig.height=8}
+diagnostics(mh_data$theta_1, mh_data$theta_2)
+
+```
+
