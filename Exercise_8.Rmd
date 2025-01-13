@@ -17,22 +17,14 @@ set.seed(11721138)
 ```
 
 ```{r}
-# list.of.packages <- c('ggplot2','dplyr',"tidyr",'lattice',"Pareto","HDInterval","rstanarm","rstan","rjags","bayess","MCMCpack","MASS","data.table","bayesreg","boot","MCMCvis","Rgraphviz","graph","invgamma")
-# new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-# if(length(new.packages)) install.packages(new.packages)
-# # INLA
-# install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
-# inla.upgrade()
-# install.packages("BiocManager")
 
+library(ISLR)
 library(Pareto)
 library(HDInterval)
 library(rstanarm)
-library(rjags)
 library(bayess)
 library(MCMCpack)
 library(INLA)
-library(data.table)
 library(MASS)
 library(bayesreg)
 library(boot)
@@ -40,4 +32,113 @@ library(MCMCvis)
 library(dplyr)
 library(invgamma)
 ```
+
+# Task 1
+
+```{r}
+# number of observations and positives for Austria
+n1 <- 1279
+p1 <- 0
+# number of observations and positives for Germany
+n2 <- 4068
+p2 <- 4
+reweight <- 1/10
+
+```
+Here I prepare the outlining numbers of the problem. 
+
+## Building a prior distribution out of the Germany data  
+
+4 positive cases out of 4068, reweighted by a factor of 1/10
+
+```{r}
+a_prior <- p2 * reweight + 1
+b_prior <- (n2 - p2) * reweight + 1
+
+xrate <- seq(0, .01, length.out=300)
+density_prior <- dbeta(xrate, shape1=a_prior, shape2=b_prior)
+```
+To build the prior distribution, I take the number of successes and failures, 
+which correspond to the alpha and beta, and multiply them with the given 
+factor of 0.1. With those two parameters, I get a density of 300 values. 
+I add a value of 1, which regularizes the special case of either parameter 
+being equal to zero. 
+
+
+## Building & plotting the posterior distribution of the Austrian data
+
+To infer the posterior distribution of the lacking Austria data, 
+I add the number of successes and failures to the parameters of the prior. 
+In this case, the number of successes is 0 and the number of failures 
+is the full observation count of the Austria data. I then use those parameters, 
+again, to get a density over the same value range. 
+```{r}
+a_posterior <- a_prior + p1
+b_posterior <- b_prior + (n1 - p1)
+density_posterior <- dbeta(xrate, shape1=a_posterior, shape2=b_posterior)
+```
+
+```{r}
+# plot both densities
+plot(xrate, density_posterior, 
+     main = "Density of Prior vs Posterior Distribution",
+     xlab = "Number of positive cases / number of observations",
+     ylab = "density",
+     type = "l", col = "blue", lwd = 2)
+lines(xrate, density_prior, col = "red", lwd = 1)
+legend("topright", legend = c("posterior", "prior"), col = c("blue", "red"), lwd = 1)
+# get the high density intervals at the 95% confidence intervals
+hpdi <- HPDinterval(as.mcmc(qbeta(c(0.025, 0.975), a_posterior, b_posterior))) 
+print_("Bounds of the 95% density interval:", hpdi[1] %>% round(4), "---",  hpdi[2] %>% round(4))
+# plot the outlines of the interval
+abline(v=hpdi[1], col="gray", lty=2)
+abline(v=hpdi[2], col="gray", lty=2)
+```
+
+
+
+
+
+
+# Task 2
+Since the residuals of a model are assumed to be normally distributed, 
+we assume the data to have this normal distribution: 
+$$y \sim N(x^T\beta, \sigma^2)$$ 
+the first parameter of which is the response of the linear model with the coefficients $\beta$ and the second of which is the variance of the residuals. This is the likelihood function.  
+When we assume $\beta$ as a normally distributed prior, 
+$$\beta \sim N(\mu_\beta, \sigma^2_\beta)$$
+we can conjugate a 
+normally distributed posterior of 
+$$\beta | y \sim N(\mu_{posterior}, \sigma^2_{posterior})$$
+
+To create a prior for the variance of the model, we have to pick a distribution 
+that has only positive values, because variance is always positive, like 
+for example the Gamma distribution. 
+
+## Define conjugate priors
+```{r}
+# beta
+
+
+
+```
+
+
+
+```{r}
+data(Auto)
+
+x <- Auto$horsepower # input data
+y <- Auto$mpg # the response
+
+# scale the data
+x <- x %>% scale()
+y <- y %>% scale()
+
+n <- y %>% length()
+
+```
+
+
+
 

@@ -158,14 +158,30 @@ diagnostics <- function(t1, t2){
 }
 
 ```
+My diagnostics function creates plots that outline the behaviour of two given 
+Markov chains. It first draws trace plots, whoch show how the parameters values 
+evolve over the 30000 iterations. The blue horizontal lines are the mean and the 
+red lines are the mean +/- the standard deviations * 3.  
+Next the functions plots the autocrrelation of the samples over different 
+lag values.
+The function then plots the running means, i.e. the mean parameters for the 
+past iterations. 
+Finally, it plots histograms of the posterior distributions, where a 
+standard distribution curve is overlaid to outline the central limit theorem. 
 
+### Plotting the Gibbs sampler data diagnosis
 ```{r, fig.height=8}
 diagnostics(gibbs_data$theta_1, gibbs_data$theta_2)
 
 ```
-
+### Plotting the Metropolis--Hastings data diagnosis
 ```{r, fig.height=8}
 diagnostics(mh_data$theta_1, mh_data$theta_2)
 
 ```
 
+In the plots of both examples, it can be observed that the parameters approach 
+a normal distribution in the histograms. The traceplots show how stably they 
+evolve around their means. The autocorrelation per lag value behaves differently, 
+comparing the two sampling methods. The running mean plots show how the means 
+become relatively stable after ~5000 iterations. 
